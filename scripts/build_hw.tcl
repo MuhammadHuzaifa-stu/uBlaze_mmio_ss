@@ -1,79 +1,167 @@
-# scripts/build_hw.tcl
+# scripts/build_hw.tcl  (Vivado 2019.2, project mode)
+# Usage: vivado -mode batch -source scripts/build_hw.tcl -tclargs <synth|impl|bitstream>
 
-# 0. Maximize thread usage for 8 cores
 set_param general.maxThreads 8
+set jobs 8
 
-# Parse target passed via -tclargs (defaults to 'all')
-set target "all"
-if { $argc > 0 } {
-    set target [lindex $argv 0]
-}
+# ---------------------------------------------------------------- paths
+set script_dir [file dirname [file normalize [info script]]]
+set root       [file dirname $script_dir]
+set build_dir  $root/build
+set xpr        $root/uBlaze/ublaze_mcs/ublaze_mcs.xpr
+set top        mcs_top_vanilla
+file mkdir $build_dir
 
-# 1. Open existing Vivado project
-open_project ./uBlaze/ublaze_mcs/ublaze_mcs.xpr
-
-# 2. Re-generate targets for Block Designs (Clock Wizard & MCS CPU)
-set bd_files [get_files *.bd]
-if {[llength $bd_files] > 0} {
-    generate_target all $bd_files
-}
-
-# 3. Read Hardware Constraints
-add_files -fileset constrs_1 -noreuse ./hardware/constraints.xdc
-
-# 4. Parse flist.f from hardware directory
-set flist_path "./hardware/flist.f"
-set fp [open $flist_path r]
-set file_data [read $fp]
-close $fp
-
-set lines [split $file_data "\n"]
-foreach line $lines {
-    set line [string trim $line]
-    
-    # Skip empty lines and comments
-    if {$line eq "" || [string match "//*" $line] || [string match "#*" $line]} {
-        continue
-    }
-    
-    if {[string match "+incdir+*" $line]} {
-        set inc_dir [string range $line 8 end]
-        set full_inc_dir [file normalize "./hardware/$inc_dir"]
-        set_property include_dirs $full_inc_dir [current_fileset]
-    } else {
-        set sv_file [file normalize "./hardware/$line"]
-        read_verilog -sv $sv_file
+# ---------------------------------------------------------------- target
+set target "bitstream"
+if {$argc > 0} { set target [lindex $argv 0] }
+switch -- $target {
+    synth - synthesis          { set target synth }
+    impl  - implementation     { set target impl }
+    bitstream - all - hw       { set target bitstream }
+    default {
+        puts "ERROR: Unknown target '$target'. Valid: synth, impl, bitstream"
+        exit 1
     }
 }
 
-# 5. Set Top Module
-set_property top mcs_top_vanilla [current_fileset]
-update_compile_order -fileset sources_1
-
-# 6. Target Execution Logic
-if {$target eq "synth" || $target eq "synthesis"} {
-    puts "=== Running Synthesis ==="
-    launch_runs synth_1 -jobs 8
-    wait_on_run synth_1
-} elseif {$target eq "impl" || $target eq "implementation"} {
-    puts "=== Running Implementation ==="
-    launch_runs impl_1 -jobs 8
-    wait_on_run impl_1
-
-} elseif {$target eq "bitstream" || $target eq "all" || $target eq "hw"} {
-    puts "=== Running Synthesis, Implementation, and Bitstream Generation ==="
-    launch_runs synth_1 -jobs 8
-    wait_on_run synth_1
-    
-    launch_runs impl_1 -to_step write_bitstream -jobs 8
-    wait_on_run impl_1
-
-    file mkdir ./build
-    write_hw_platform -fixed -force -file ./build/system.xsa
-
-} else {
-    puts "ERROR: Unknown target '$target'. Valid targets: synth, impl, bitstream, all"
+# ---------------------------------------------------------------- helpers
+proc fail {msg} {
+    puts "ERROR: $msg"
+    catch {close_project}
     exit 1
 }
 
-exit
+# Run a stage only if needed. Returns 1 if it actually ran, 0 if skipped.
+#   done    : glob matching the run STATUS when the wanted stage is finished
+#   to_step : optional launch_runs -to_step value
+proc run_and_check {run jobs done {to_step ""}} {
+    set stale  [get_property NEEDS_REFRESH [get_runs $run]]
+    set status [get_property STATUS [get_runs $run]]
+
+    if {!$stale && [string match $done $status]} {
+        puts "INFO: $run is up to date ($status), skipping"
+        return 0
+    }
+    if {$stale || [string match "*Complete*" $status]} { reset_run $run }
+
+    if {$to_step ne ""} {
+        launch_runs $run -to_step $to_step -jobs $jobs
+    } else {
+        launch_runs $run -jobs $jobs
+    }
+    wait_on_run $run
+
+    set status [get_property STATUS [get_runs $run]]
+    puts "INFO: $run status: $status"
+    if {![string match $done $status]} {
+        fail "$run did not finish ($status). See [get_property DIRECTORY [get_runs $run]]/runme.log"
+    }
+    return 1
+}
+
+# ---------------------------------------------------------------- build
+if {[catch {
+
+    if {![file exists $xpr]} { fail "Project not found: $xpr" }
+    open_project $xpr
+
+    # Drop HDL entries whose files no longer exist (old chu_*.sv etc.)
+    foreach f [get_files -quiet -of_objects [get_filesets sources_1]] {
+        if {[lsearch -exact {.sv .v .vh .svh .vhd} [file extension $f]] >= 0 && ![file exists $f]} {
+            puts "INFO: removing stale source entry $f"
+            remove_files -quiet $f
+        }
+    }
+
+    # Upgrade locked IPs if possible (best done once in the GUI, see notes)
+    set locked [get_ips -quiet -filter {IS_LOCKED == 1}]
+    if {[llength $locked] > 0} {
+        puts "INFO: upgrading locked IPs: $locked"
+        upgrade_ip $locked
+    }
+
+    # Generate output products for TOP-LEVEL block designs only
+    foreach bd [get_files -quiet *.bd] {
+        # nested sub-designs (inside an IP) are generated by their parent
+        if {[string match "*/ip/*/bd_*/*.bd" $bd]} { continue }
+        generate_target all $bd
+    }
+
+    # Constraints (skip if already in the project)
+    set xdc [file normalize $root/hardware/constraints.xdc]
+    if {![file exists $xdc]} { fail "Missing constraints: $xdc" }
+    if {[llength [get_files -quiet -of_objects [get_filesets constrs_1] $xdc]] == 0} {
+        add_files -fileset constrs_1 $xdc
+    }
+
+    # Sources from flist.f (paths relative to hardware/)
+    set hw_dir [file normalize $root/hardware]
+    set fp [open $hw_dir/flist.f r]
+    set lines [split [read $fp] "\n"]
+    close $fp
+
+    set inc_dirs {}
+    foreach line $lines {
+        set line [string trim $line]
+        if {$line eq "" || [string match "//*" $line] || [string match "#*" $line]} { continue }
+
+        if {[string match "+incdir+*" $line]} {
+            lappend inc_dirs [file normalize $hw_dir/[string range $line 8 end]]
+        } else {
+            set f [file normalize $hw_dir/$line]
+            if {![file exists $f]} { fail "flist.f references missing file: $line" }
+            if {[llength [get_files -quiet $f]] == 0} {
+                add_files -fileset sources_1 $f
+            }
+            set_property file_type SystemVerilog [get_files $f]
+        }
+    }
+    set_property include_dirs $inc_dirs [get_filesets sources_1]
+
+    set_property top $top [get_filesets sources_1]
+    update_compile_order -fileset sources_1
+
+    # ------------------------------------------------------------ run
+    puts "=== Synthesis ==="
+    set synth_ran [run_and_check synth_1 $jobs "synth_design Complete*"]
+
+    if {$target in {impl bitstream}} {
+        if {$synth_ran} { catch {reset_run impl_1} }
+
+        if {$target eq "impl"} {
+            puts "=== Implementation ==="
+            run_and_check impl_1 $jobs "route_design Complete*"
+        } else {
+            puts "=== Implementation + Bitstream ==="
+            run_and_check impl_1 $jobs "write_bitstream Complete*" write_bitstream
+        }
+
+        set wns [get_property STATS.WNS [get_runs impl_1]]
+        set whs [get_property STATS.WHS [get_runs impl_1]]
+        puts "INFO: WNS=$wns  WHS=$whs"
+        if {$wns ne "" && $wns < 0} { puts "WARNING: setup timing not met (WNS=$wns)" }
+        if {$whs ne "" && $whs < 0} { puts "WARNING: hold timing not met (WHS=$whs)" }
+    }
+
+    if {$target eq "bitstream"} {
+        set impl_dir [get_property DIRECTORY [get_runs impl_1]]
+
+        open_run impl_1
+        write_hw_platform -fixed -force -include_bit -file $build_dir/system.xsa
+        close_design
+
+        file copy -force $impl_dir/$top.bit $build_dir/$top.bit
+        foreach mmi [glob -nocomplain $impl_dir/*.mmi] {
+            file copy -force $mmi $build_dir/
+        }
+        puts "INFO: Outputs in $build_dir: system.xsa, $top.bit"
+    }
+
+    close_project
+
+} err]} {
+    fail "Unhandled error: $err"
+}
+
+exit 0

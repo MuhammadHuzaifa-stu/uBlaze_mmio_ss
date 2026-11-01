@@ -1,31 +1,50 @@
 SHELL := /bin/bash
-VIVADO_ENV = source ~/.xilinx_env
+VIVADO_ENV ?= source ~/.xilinx_env
+VIVADO = $(VIVADO_ENV) && vivado -mode batch -notrace
 
-.PHONY: all hw synthesis implementation bitstream clean
+PRJ   := uBlaze/ublaze_mcs
+RUNS  := $(PRJ)/ublaze_mcs.runs
+TOP   := mcs_top_vanilla
 
-# Default target: builds everything (all -> hw -> bitstream)
-all: hw
+# Everything the hardware build depends on
+HW_SRCS := $(shell sed -n 's|^\./\(.*\.sv\)$$|hardware/\1|p' hardware/flist.f) \
+           hardware/flist.f hardware/constraints.xdc \
+           $(PRJ)/ublaze_mcs.xpr scripts/build_hw.tcl
 
-hw: bitstream
+SYNTH_DCP := $(RUNS)/synth_1/$(TOP).dcp
+IMPL_DCP  := $(RUNS)/impl_1/$(TOP)_routed.dcp
+BIT       := $(RUNS)/impl_1/$(TOP).bit
 
-# 1. Synthesis Target
-synthesis:
-	@echo "=== Target: Synthesis ==="
+.PHONY: all hw synthesis implementation bitstream gui clean distclean
+all hw: bitstream
+
+synthesis:      $(SYNTH_DCP)
+implementation: $(IMPL_DCP)
+bitstream:      $(BIT)
+
+define vivado_run
 	@mkdir -p build
-	@$(SHELL) -c "$(VIVADO_ENV) && vivado -mode batch -source scripts/build_hw.tcl -tclargs synth -log build/vivado_synth.log -jou build/vivado_synth.jou"
+	@$(VIVADO) -log build/vivado_$(1).log -jou build/vivado_$(1).jou \
+	    -source scripts/build_hw.tcl -tclargs $(1)
+endef
 
-# 2. Implementation Target
-implementation:
-	@echo "=== Target: Implementation ==="
-	@mkdir -p build
-	@$(SHELL) -c "$(VIVADO_ENV) && vivado -mode batch -source scripts/build_hw.tcl -tclargs impl -log build/vivado_impl.log -jou build/vivado_impl.jou"
+$(SYNTH_DCP): $(HW_SRCS)
+	$(call vivado_run,synth)
 
-# 3. Bitstream Generation Target
-bitstream:
-	@echo "=== Target: Bitstream Generation ==="
-	@mkdir -p build
-	@$(SHELL) -c "$(VIVADO_ENV) && vivado -mode batch -source scripts/build_hw.tcl -tclargs bitstream -log build/vivado_bitstream.log -jou build/vivado_bitstream.jou"
+$(IMPL_DCP): $(SYNTH_DCP)
+	$(call vivado_run,impl)
 
-# Clean build logs and temp files
+$(BIT): $(IMPL_DCP)
+	$(call vivado_run,bitstream)
+
+# Open the project in the Vivado GUI (close any batch job first)
+gui:
+	@$(VIVADO_ENV) && vivado -mode gui $(PRJ)/ublaze_mcs.xpr &
+
 clean:
-	rm -rf build/ .Xil/ *.log *.jou
+	rm -rf build .Xil *.log *.jou
+
+# Also wipes generated Vivado run/cache output (forces a full rebuild)
+distclean: clean
+	rm -rf $(PRJ)/ublaze_mcs.runs $(PRJ)/ublaze_mcs.cache \
+	       $(PRJ)/ublaze_mcs.ip_user_files $(PRJ)/ublaze_mcs.hw $(PRJ)/ublaze_mcs.sim

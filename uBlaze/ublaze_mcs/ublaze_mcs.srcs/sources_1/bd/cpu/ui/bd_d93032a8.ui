@@ -1,15 +1,19 @@
 {
-   ExpandedHierarchyInLayout: "",
-   guistr: "# # String gsaved with Nlview 6.8.5  2018-01-30 bk=1.4354 VDI=40 GEI=35 GUI=JA:1.6 non-TLS-threadsafe
+   "ActiveEmotionalView":"Default View",
+   "Default View_ScaleFactor":"2.0",
+   "Default View_TopLeft":"-444,-281",
+   "ExpandedHierarchyInLayout":"",
+   "guistr":"# # String gsaved with Nlview 7.0.21  2019-05-29 bk=1.5064 VDI=41 GEI=36 GUI=JA:9.0 TLS
 #  -string -flagsOSRD
-preplace port Clk_0 -pg 1 -y -50 -defaultsOSRD
-preplace port IO_0 -pg 1 -y -40 -defaultsOSRD
-preplace port Reset_0 -pg 1 -y -30 -defaultsOSRD
-preplace inst microblaze_mcs_0 -pg 1 -lvl 1 -y -40 -defaultsOSRD
-preplace netloc microblaze_mcs_0_IO 1 1 1 N
-preplace netloc Clk_0_1 1 0 1 NJ
-preplace netloc Reset_0_1 1 0 1 NJ
-levelinfo -pg 1 -20 190 400 -top -110 -bot 140
-",
+preplace port IO_0 -pg 1 -lvl 2 -x 400 -y -40 -defaultsOSRD
+preplace port Clk_0 -pg 1 -lvl 0 -x -20 -y -60 -defaultsOSRD
+preplace port Reset_0 -pg 1 -lvl 0 -x -20 -y -30 -defaultsOSRD
+preplace inst microblaze_mcs_0 -pg 1 -lvl 1 -x 190 -y -40 -defaultsOSRD
+preplace netloc Clk_0_1 1 0 1 0J -60n
+preplace netloc Reset_0_1 1 0 1 NJ -30
+preplace netloc microblaze_mcs_0_IO 1 1 1 N -40
+levelinfo -pg 1 -20 190 400
+pagesize -pg 1 -db -bbox -sgen -120 -110 480 140
+"
 }
-
+0

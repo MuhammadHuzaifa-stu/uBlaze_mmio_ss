@@ -36,3 +36,15 @@ SDK.log
 # Generated BSPs and temporary folders
 *_bsp/
 .Xil/
+
+# Generated block-design output products
+**/bd/*/ipshared/
+**/bd/*/sim/
+**/bd/*/synth/
+**/bd/*/hw_handoff/
+**/bd/*/*.bxml
+**/bd/*/ip/**
+!**/bd/*/ip/**/
+!**/bd/*/ip/*/*.xci
+*.protoinst
+build/

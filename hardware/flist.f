@@ -17,7 +17,7 @@
 ./src/uart.sv
 ./src/uart_core.sv
 ./src/i2c_master.sv
-./src/i2_core.sv
+./src/i2c_core.sv
 ./src/spi.sv
 ./src/spi_core.sv
 ./src/mcs_top_vanilla.sv
