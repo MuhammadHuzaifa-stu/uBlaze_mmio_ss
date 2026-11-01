@@ -1,0 +1,38 @@
+.vscode/
+
+# ==========================================
+# Vivado Ignored Files & Directories
+# ==========================================
+*.cache/
+*.hw/
+*.runs/
+*.sim/
+*.ip_user_files/
+*.gen/
+*.jou
+*.log
+*.str
+*.zip
+
+# Vivado Exported Hardware / Bitstreams
+*.hdf
+*.xsa
+*.bit
+*.bin
+*.mcs
+
+# ==========================================
+# Xilinx SDK / Vitis Workspace Ignored
+# ==========================================
+.metadata/
+.sdk/
+RemoteSystemsTempFiles/
+web_talk/
+SDK.log
+*.o
+*.elf
+*.d
+
+# Generated BSPs and temporary folders
+*_bsp/
+.Xil/
