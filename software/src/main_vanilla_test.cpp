@@ -381,10 +381,13 @@ I2cCore i2c(get_slot_addr(BRIDGE_BASE, S10_I2C));
 
 int main() {
 
-
-    // while(1) {
-        timer_check(&led);
-        // led_check(&led, 6);
+    // volatile unsigned int *led_reg = (volatile unsigned int *)(BRIDGE_BASE + S2_LED * 32 * 4);
+    // *led_reg = 0x3f;
+    // while (1) {}
+    while(1) {
+        // uart.disp("hello\n\r");
+        // timer_check(&led);
+        led_check(&led, 6);
         // sw_check(&led, &sw);
         // uart_check();
         // debug("main - switch value / up time : ", sw.read(), now_ms());
@@ -401,10 +404,10 @@ int main() {
         // sd_init(&spi);
         // test_sd_read(&spi);
     //  >>>>>>>>>> I2C TEST <<<<<<<<<<
-        eeprom_write(&i2c, 0x0010, 0xAB); // Write 0xAB to address 0x0010
-        uint8_t val = eeprom_read(&i2c, 0x0010); // Read back from address 0x0010
-        uart.disp("EEPROM read value: ");
-        uart.disp((int)val, 16);
-        uart.disp("\n\r");
-    // }
+        // eeprom_write(&i2c, 0x0010, 0xAB); // Write 0xAB to address 0x0010
+        // uint8_t val = eeprom_read(&i2c, 0x0010); // Read back from address 0x0010
+        // uart.disp("EEPROM read value: ");
+        // uart.disp((int)val, 16);
+        // uart.disp("\n\r");
+    }
 }

@@ -48,3 +48,4 @@ SDK.log
 !**/bd/*/ip/*/*.xci
 *.protoinst
 build/
+vitis_ws/
