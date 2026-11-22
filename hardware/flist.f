@@ -1,6 +1,7 @@
 +incdir+./include
 
 ./include/mcs_pkg.sv
+./src/sync_2ff.sv
 ./src/mcs_bridge.sv
 ./src/mmio_controller.sv
 ./src/mmio_sys_vanilla.sv

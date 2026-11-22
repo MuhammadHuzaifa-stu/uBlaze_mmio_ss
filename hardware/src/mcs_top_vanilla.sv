@@ -14,7 +14,7 @@ module mcs_top_vanilla
     output logic [NUM_LED-1:0]    led,
 
     // uart
-    input logic                   uart_rx,
+    input  logic                  uart_rx,
     output logic                  uart_tx,
     // SPI
     output logic                  spi_clk,
@@ -32,6 +32,7 @@ module mcs_top_vanilla
     localparam MMIO_ADDR_W = 21;
 
     logic                   clk;
+    logic                   arst_n_in;
     logic                   arst_n;
     logic                   locked;
 
@@ -54,7 +55,39 @@ module mcs_top_vanilla
     logic [DATA_WIDTH -1:0] fp_wr_data;
     logic [DATA_WIDTH -1:0] fp_rd_data;
 
-    assign arst_n = locked & sys_rstn;
+    logic [NUM_SW -1:0]     sw_s;
+    logic                   uart_rx_s;
+
+    assign arst_n_in = locked & sys_rstn;
+
+    //-------------------
+    // miso and sda are intentionally unsynchronized for now
+    //-------------------
+
+    // reset: async assert, sync release
+    (* ASYNC_REG = "TRUE" *) logic [1:0] rst_sync;
+    always_ff @(posedge clk or negedge arst_n_in)
+        if (!arst_n_in) rst_sync <= 2'b00;
+        else            rst_sync <= {rst_sync[0], 1'b1};
+    assign arst_n = rst_sync[1];
+
+    // input synchronizers (reset by the synchronized reset)
+    sync_2ff #(
+        .WIDTH(NUM_SW)
+    ) u_sw_sync (
+        .clk   (clk   ), 
+        .arst_n(arst_n), 
+        .d     (sw    ), 
+        .q     (sw_s  )
+    );
+    sync_2ff #(
+        .RESET_VAL(1'b1)
+    ) u_rx_sync (
+        .clk   (clk      ), 
+        .arst_n(arst_n   ), 
+        .d     (uart_rx  ), 
+        .q     (uart_rx_s)
+    );
 
     // clocking wizard
     clock_wrapper u_clock_gen (
@@ -125,11 +158,11 @@ module mcs_top_vanilla
         .mmio_wdata ( fp_wr_data  ),
         .mmio_rdata ( fp_rd_data  ),
         // Switches and LEDs
-        .sw         ( sw          ),
+        .sw         ( sw_s        ),
         .led        ( led         ),
         // UART
         .uart_tx    ( uart_tx     ),
-        .uart_rx    ( uart_rx     ),
+        .uart_rx    ( uart_rx_s   ),
         .spi_clk    ( spi_clk     ),
         .mosi       ( mosi        ),
         .miso       ( miso        ),

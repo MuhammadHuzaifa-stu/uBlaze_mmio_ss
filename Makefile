@@ -75,6 +75,9 @@ program: $(DL_BIT)
 gui:
 	@$(VIVADO_ENV) && vivado -mode gui $(PRJ)/ublaze_mcs.xpr &
 
+reports: $(BIT)
+	@$(VIVADO) -log build/vivado_reports.log -jou build/vivado_reports.jou -source scripts/report.tcl
+
 clean:
 	rm -rf build $(WS) .Xil *.log *.jou
 
