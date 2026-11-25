@@ -1,4 +1,4 @@
-module vga_sync_demo 
+module vga_sync 
     import display_pkg::CD;
 
     import display_pkg::HD;
